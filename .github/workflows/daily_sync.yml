@@ -1,0 +1,35 @@
+name: Daily Fitbit Sync
+
+# 設定觸發條件
+on:
+  schedule:
+    # GitHub 伺服器使用的是 UTC 時間。
+    # 台灣是 UTC+8，為了讓受試者早上有時間開手機同步手環，建議設在台灣時間每天中午 12:00 執行。
+    # 所以 UTC 時間是 12 - 8 = 4。 (格式：分 時 日 月 星期)
+    - cron: '0 4 * * *' 
+  workflow_dispatch: # 這個設定讓你可以隨時在 GitHub 網頁上手動點擊「執行」來測試
+
+jobs:
+  sync-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 下載程式碼
+        uses: actions/checkout@v4
+      
+      - name: 🐍 設定 Python 環境
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          
+      - name: 📦 安裝依賴套件
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          
+      - name: 🚀 執行抓取任務
+        env: # 從剛才設定的 Secrets 中把變數安全地灌入執行環境
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          FITBIT_CLIENT_ID: ${{ secrets.FITBIT_CLIENT_ID }}
+          FITBIT_CLIENT_SECRET: ${{ secrets.FITBIT_CLIENT_SECRET }}
+        run: python main.py
