@@ -2,6 +2,7 @@ import os
 import time
 import base64
 import requests
+import re
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from supabase import create_client, Client
@@ -76,7 +77,10 @@ def fetch_and_store_yesterday_data():
         refresh_token = user['fitbit_refresh_token']
         
         # 簡單檢查 Token 是否已經過期 (保留 5 分鐘的容錯空間)
-        expires_at = datetime.fromisoformat(user['expires_at'].replace('Z', '+00:00'))
+        # 用 re.sub 把小數點和後面的數字強制清空
+        clean_time_str = re.sub(r'\.\d+', '', user['expires_at'].replace('Z', '+00:00'))
+        expires_at = datetime.fromisoformat(clean_time_str)
+        
         if datetime.now(timezone.utc) > (expires_at - timedelta(minutes=5)):
             access_token = refresh_fitbit_token(p_id, refresh_token)
             if not access_token:
