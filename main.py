@@ -58,10 +58,11 @@ def refresh_fitbit_token(participant_id, old_refresh_token):
         print(f"[{participant_id}] ❌ Token 刷新失敗: {res.text}")
         return None
 
-def fetch_and_store_yesterday_data():
-    # 計算昨天日期
-    yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-    print(f"=== 開始抓取 {yesterday} 的生理資料 ===")
+def fetch_and_store_fetch_data(target_date=None):
+    # 如果有傳入指定日期就用指定的，沒有就預設抓昨天
+    fetch_date = target_date if target_date else (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+
+    print(f"=== 開始抓取 {fetch_date} 的生理資料 ===")
 
     # 從資料庫撈出所有使用者
     response = supabase.table("user_tokens").select("*").execute()
@@ -90,14 +91,14 @@ def fetch_and_store_yesterday_data():
         
         try:
             # 1. 抓取活動數據 (包含久坐、輕度、MVPA)
-            act_res = requests.get(f"https://api.fitbit.com/1/user/-/activities/date/{yesterday}.json", headers=headers)
+            act_res = requests.get(f"https://api.fitbit.com/1/user/-/activities/date/{fetch_date}.json", headers=headers)
             
             # 如果還是遇到 401，可能是剛剛沒檢查到，再強制刷新一次
             if act_res.status_code == 401:
                 access_token = refresh_fitbit_token(p_id, refresh_token)
                 if not access_token: continue
                 headers = {"Authorization": f"Bearer {access_token}"}
-                act_res = requests.get(f"https://api.fitbit.com/1/user/-/activities/date/{yesterday}.json", headers=headers)
+                act_res = requests.get(f"https://api.fitbit.com/1/user/-/activities/date/{fetch_date}.json", headers=headers)
 
             act_data = act_res.json().get('summary', {})
             sedentary = act_data.get('sedentaryMinutes', 0)
@@ -105,19 +106,19 @@ def fetch_and_store_yesterday_data():
             mvpa = act_data.get('fairlyActiveMinutes', 0) + act_data.get('veryActiveMinutes', 0)
 
             # 2. 抓取睡眠數據
-            sleep_res = requests.get(f"https://api.fitbit.com/1.2/user/-/sleep/date/{yesterday}.json", headers=headers).json()
+            sleep_res = requests.get(f"https://api.fitbit.com/1.2/user/-/sleep/date/{fetch_date}.json", headers=headers).json()
             sleep_records = sleep_res.get('sleep', [])
             sleep_efficiency = sleep_records[0].get('efficiency') if len(sleep_records) > 0 else None
 
             # 3. 抓取 HRV 數據
-            hrv_res = requests.get(f"https://api.fitbit.com/1/user/-/hrv/date/{yesterday}.json", headers=headers).json()
+            hrv_res = requests.get(f"https://api.fitbit.com/1/user/-/hrv/date/{fetch_date}.json", headers=headers).json()
             hrv_records = hrv_res.get('hrv', [])
             hrv_average = hrv_records[0].get('value', {}).get('dailyRmssd') if len(hrv_records) > 0 else None
 
             # 4. 組裝並 Upsert 到 Supabase
             payload = {
                 "participant_id": p_id,
-                "record_date": yesterday,
+                "record_date": fetch_date,
                 "sedentary_minutes": sedentary,
                 "light_activity_minutes": light,
                 "mvpa_minutes": mvpa,
@@ -137,4 +138,4 @@ def fetch_and_store_yesterday_data():
     print("=== 任務執行完畢 ===")
 
 if __name__ == "__main__":
-    fetch_and_store_yesterday_data()
+    fetch_and_store_fetch_data()
