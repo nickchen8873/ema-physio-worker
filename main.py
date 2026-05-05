@@ -108,7 +108,19 @@ def fetch_and_store_fetch_data(target_date=None):
             # 2. 抓取睡眠數據
             sleep_res = requests.get(f"https://api.fitbit.com/1.2/user/-/sleep/date/{fetch_date}.json", headers=headers).json()
             sleep_records = sleep_res.get('sleep', [])
-            sleep_efficiency = sleep_records[0].get('efficiency') if len(sleep_records) > 0 else None
+
+            # 初始化數值
+            sleep_hours = None
+            sleep_efficiency = None
+
+            if sleep_records:
+                # 策略：尋找當天的「主睡眠」，如果沒標記則取第一筆
+                main_sleep = next((s for s in sleep_records if s.get('isMainSleep')), sleep_records[0])
+                
+                # 抓取分鐘數並轉換
+                minutes_asleep = main_sleep.get('minutesAsleep') or main_sleep.get('totalMinutesAsleep') or 0
+                sleep_hours = round(minutes_asleep / 60, 2)
+                sleep_efficiency = main_sleep.get('efficiency')
 
             # 3. 抓取 HRV 數據
             hrv_res = requests.get(f"https://api.fitbit.com/1/user/-/hrv/date/{fetch_date}.json", headers=headers).json()
@@ -122,6 +134,7 @@ def fetch_and_store_fetch_data(target_date=None):
                 "sedentary_minutes": sedentary,
                 "light_activity_minutes": light,
                 "mvpa_minutes": mvpa,
+                "sleep_hours": sleep_hours,
                 "sleep_efficiency": sleep_efficiency,
                 "hrv_average": hrv_average
             }
